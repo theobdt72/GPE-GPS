@@ -1,0 +1,62 @@
+int main(void)
+{
+	//Initialisation de la couche logicielle HAL (Hardware Abstraction Layer)
+	//Cette ligne doit rester la première étape de la fonction main().
+	HAL_Init();
+
+
+	//Initialisation de l'UART2 à la vitesse de 115200 bauds/secondes (92kbits/s) PA2 : Tx  | PA3 : Rx.
+		//Attention, les pins PA2 et PA3 ne sont pas reliées jusqu'au connecteur de la Nucleo.
+		//Ces broches sont redirigées vers la sonde de débogage, la liaison UART étant ensuite encapsulée sur l'USB vers le PC de développement.
+	UART_init(UART2_ID,115200);
+
+	//"Indique que les printf sortent vers le périphérique UART2."
+	SYS_set_std_usart(UART2_ID, UART2_ID, UART2_ID);
+
+	//Initialisation du port de la led Verte (carte Nucleo)
+	BSP_GPIO_PinCfg(LED_GREEN_GPIO, LED_GREEN_PIN, GPIO_MODE_OUTPUT_PP,GPIO_NOPULL,GPIO_SPEED_FREQ_HIGH);
+
+	//Initialisation du port du bouton bleu (carte Nucleo)
+	BSP_GPIO_PinCfg(BLUE_BUTTON_GPIO, BLUE_BUTTON_PIN, GPIO_MODE_INPUT,GPIO_PULLUP,GPIO_SPEED_FREQ_HIGH);
+
+	//On ajoute la fonction process_ms à la liste des fonctions appelées automatiquement chaque ms par la routine d'interruption du périphérique SYSTICK
+	Systick_add_callback_function(&process_ms);
+
+	gps_datas_t gps_datas;
+
+	while(1)	//boucle de tâche de fond
+	{
+		GPS_ReadAll(&gps_datas);
+	}
+}
+
+******** Dans le  GPS.c : ********************
+
+#include "stm32f1_i2c.h" //pour le I2C
+
+
+*** Def ReadAll pour le GPS ***
+nmea_frame_e GPS_ReadAll(gps_datas_t* DataStruct) {
+	uint8_t data[10];
+	I2C_ReadMulti(I2C1, DataStruct->device_address, 0x39, data,10);
+
+	/* Stocker time data */
+	DataStruct->id = (uint16_t)(data[0] << 8 | data[1]);
+	DataStruct->time = (uint32_t)(data[2] << 8 | data[3]);
+	DataStruct->seconds = (uint32_t)(data[4] << 8 | data[5]);
+
+	/* Stocker GPS data */
+	DataStruct->latitude_deg = (double)(data[6] << 8 | data[7]);
+	DataStruct->longitude_deg = (double)(data[8] << 8 | data[9]);
+
+	/* return type de trame */
+	return TRAME_GPRMC;            //TrameGPRMC=TrameNMEA pour les coordonnées géographiques
+}
+
+********* Dans le GPS.h : ***************
+
+#define GPS_DATAS_OUT		0x39     // registre utilisé
+
+*** Dans la stucture gps_datas_t : ***
+
+uint8_t device_address;		//I2C address of the device
